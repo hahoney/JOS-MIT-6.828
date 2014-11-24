@@ -11,6 +11,8 @@
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
 
+#include <kern/pmap.h>
+
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
 
@@ -24,7 +26,8 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
-        { "backtrace", "Back trace the functions", mon_backtrace}
+        { "backtrace", "Back trace the functions", mon_backtrace},
+        { "showmappings", "Show virtual memory mappings and permission", mon_showmappings}
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -84,7 +87,23 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
+int
+mon_showmappings(int argc, char **argv, struct Trapframe *tf) 
+{
+    void *start = (void *) strtol(argv[1], NULL, 16);
+    void *end = (void *) strtol(argv[2], NULL, 16);
 
+    physaddr_t addr_start = (physaddr_t) start;
+    physaddr_t addr_end = (physaddr_t) end;
+
+    physaddr_t addr_ptr = addr_start;
+    while (addr_ptr < addr_end) {
+        physaddr_t physaddr_ptr = *(pgdir_walk(kern_pgdir, (void *)addr_ptr, 0));
+        cprintf("VA=%08x PA=%08x PERM=%08x\n", addr_ptr, PTE_ADDR(physaddr_ptr), physaddr_ptr & 0xFFF);
+        addr_ptr += PGSIZE;
+    }
+return 0;
+}
 
 /***** Kernel monitor command interpreter *****/
 
