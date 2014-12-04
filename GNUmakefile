@@ -51,6 +51,8 @@ endif
 ifndef QEMU
 QEMU := $(shell if which qemu > /dev/null; \
 	then echo qemu; exit; \
+        elif which qemu-system-i386 > /dev/null; \
+        then echo qemu-system-i386; exit; \
 	else \
 	qemu=/Applications/Q.app/Contents/MacOS/i386-softmmu.app/Contents/MacOS/i386-softmmu; \
 	if test -x $$qemu; then echo $$qemu; exit; fi; fi; \
@@ -84,6 +86,9 @@ PERL	:= perl
 CFLAGS := $(CFLAGS) $(DEFS) $(LABDEFS) -O1 -fno-builtin -I$(TOP) -MD
 CFLAGS += -fno-omit-frame-pointer
 CFLAGS += -Wall -Wno-format -Wno-unused -Werror -gstabs -m32
+# -fno-tree-ch prevented gcc from sometimes reordering read_ebp() before
+# mon_backtrace()'s function prologue on gcc version: (Debian 4.7.2-5) 4.7.2
+CFLAGS += -fno-tree-ch
 
 # Add -fno-stack-protector if the option exists.
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
@@ -116,7 +121,15 @@ all:
 KERN_CFLAGS := $(CFLAGS) -DJOS_KERNEL -gstabs
 USER_CFLAGS := $(CFLAGS) -DJOS_USER -gstabs
 
-
+# Update .vars.X if variable X has changed since the last make run.
+#
+# Rules that use variable X should depend on $(OBJDIR)/.vars.X.  If
+# the variable's value has changed, this will update the vars file and
+# force a rebuild of the rule that depends on it.
+$(OBJDIR)/.vars.%: FORCE
+	$(V)echo "$($*)" | cmp -s $@ || echo "$($*)" > $@
+.PRECIOUS: $(OBJDIR)/.vars.%
+.PHONY: FORCE
 
 
 # Include Makefrags for subdirectories
@@ -126,32 +139,40 @@ include lib/Makefrag
 include user/Makefrag
 
 
-QEMUOPTS = -hda $(OBJDIR)/kern/kernel.img -serial mon:stdio -gdb tcp::$(GDBPORT) -D qemu.log
-IMAGES = $(OBJDIR)/kern/kernel.img
-QEMUOPTS += $(QEMUEXTRA)
+CPUS ?= 1
 
+QEMUOPTS = -hda $(OBJDIR)/kern/kernel.img -serial mon:stdio -gdb tcp::$(GDBPORT)
+QEMUOPTS += $(shell if $(QEMU) -nographic -help | grep -q '^-D '; then echo '-D qemu.log'; fi)
+IMAGES = $(OBJDIR)/kern/kernel.img
+QEMUOPTS += -smp $(CPUS)
+QEMUOPTS += $(QEMUEXTRA)
 
 .gdbinit: .gdbinit.tmpl
 	sed "s/localhost:1234/localhost:$(GDBPORT)/" < $^ > $@
 
-qemu: $(IMAGES) .gdbinit
+gdb:
+	gdb -x .gdbinit
+
+pre-qemu: .gdbinit
+
+qemu: $(IMAGES) pre-qemu
 	$(QEMU) $(QEMUOPTS)
 
-qemu-nox: $(IMAGES) .gdbinit
+qemu-nox: $(IMAGES) pre-qemu
 	@echo "***"
 	@echo "*** Use Ctrl-a x to exit qemu"
 	@echo "***"
 	$(QEMU) -nographic $(QEMUOPTS)
 
-qemu-gdb: $(IMAGES) .gdbinit
+qemu-gdb: $(IMAGES) pre-qemu
 	@echo "***"
-	@echo "*** Now run 'gdb'." 1>&2
+	@echo "*** Now run 'make gdb'." 1>&2
 	@echo "***"
 	$(QEMU) $(QEMUOPTS) -S
 
-qemu-nox-gdb: $(IMAGES) .gdbinit
+qemu-nox-gdb: $(IMAGES) pre-qemu
 	@echo "***"
-	@echo "*** Now run 'gdb'." 1>&2
+	@echo "*** Now run 'make gdb'." 1>&2
 	@echo "***"
 	$(QEMU) -nographic $(QEMUOPTS) -S
 
@@ -161,15 +182,15 @@ print-qemu:
 print-gdbport:
 	@echo $(GDBPORT)
 
-print-qemugdb:
-	@echo $(QEMUGDB)
-
 # For deleting the build
 clean:
 	rm -rf $(OBJDIR) .gdbinit jos.in qemu.log
 
 realclean: clean
-	rm -rf lab$(LAB).tar.gz jos.out
+	rm -rf lab$(LAB).tar.gz \
+		jos.out $(wildcard jos.out.*) \
+		qemu.pcap $(wildcard qemu.pcap.*) \
+		myapi.key
 
 distclean: realclean
 	rm -rf conf/gcc.mk
@@ -178,40 +199,118 @@ ifneq ($(V),@)
 GRADEFLAGS += -v
 endif
 
-grade: $(LABSETUP)grade-lab$(LAB).sh
+grade:
 	@echo $(MAKE) clean
 	@$(MAKE) clean || \
 	  (echo "'make clean' failed.  HINT: Do you have another running instance of JOS?" && exit 1)
-	$(MAKE) all
-	sh $(LABSETUP)grade-lab$(LAB).sh $(GRADEFLAGS)
+	./grade-lab$(LAB) $(GRADEFLAGS)
 
-handin: tarball
-	@echo Please visit http://pdos.csail.mit.edu/6.828/submit/
-	@echo and upload lab$(LAB)-handin.tar.gz.  Thanks!
+git-handin: handin-check
+	@if test -n "`git config remote.handin.url`"; then \
+		echo "Hand in to remote repository using 'git push handin HEAD' ..."; \
+		if ! git push -f handin HEAD; then \
+            echo ; \
+			echo "Hand in failed."; \
+			echo "As an alternative, please run 'make tarball'"; \
+			echo "and visit http://pdos.csail.mit.edu/6.828/submit/"; \
+			echo "to upload lab$(LAB)-handin.tar.gz.  Thanks!"; \
+			false; \
+		fi; \
+    else \
+		echo "Hand-in repository is not configured."; \
+		echo "Please run 'make handin-prep' first.  Thanks!"; \
+		false; \
+	fi
 
-tarball: realclean
-	tar cf - `find . -type f | grep -v '^\.*$$' | grep -v '/CVS/' | grep -v '/\.svn/' | grep -v '/\.git/' | grep -v 'lab[0-9].*\.tar\.gz'` | gzip > lab$(LAB)-handin.tar.gz
+WEBSUB = https://ccutler.scripts.mit.edu/6.828/handin.py
+
+handin: tarball-pref myapi.key
+	@SUF=$(LAB); \
+	test -f .suf && SUF=`cat .suf`; \
+	curl -f -F file=@lab$$SUF-handin.tar.gz -F key=\<myapi.key $(WEBSUB)/upload \
+	    > /dev/null || { \
+		echo ; \
+		echo Submit seems to have failed.; \
+		echo Please go to $(WEBSUB)/ and upload the tarball manually.; }
+
+handin-check:
+	@if ! test -d .git; then \
+		echo No .git directory, is this a git repository?; \
+		false; \
+	fi
+	@if test "$$(git symbolic-ref HEAD)" != refs/heads/lab$(LAB); then \
+		git branch; \
+		read -p "You are not on the lab$(LAB) branch.  Hand-in the current branch? [y/N] " r; \
+		test "$$r" = y; \
+	fi
+	@if ! git diff-files --quiet || ! git diff-index --quiet --cached HEAD; then \
+		git status; \
+		echo; \
+		echo "You have uncomitted changes.  Please commit or stash them."; \
+		false; \
+	fi
+	@if test -n "`git ls-files -o --exclude-standard`"; then \
+		git status; \
+		read -p "Untracked files will not be handed in.  Continue? [y/N] " r; \
+		test "$$r" = y; \
+	fi
+
+tarball: handin-check
+	git archive --format=tar HEAD | gzip > lab$(LAB)-handin.tar.gz
+
+tarball-pref: handin-check
+	@SUF=$(LAB); \
+	if test $(LAB) -eq 3 -o $(LAB) -eq 4; then \
+		read -p "Which part would you like to submit? [a, b, c (lab 4 only)]" p; \
+		if test "$$p" != a -a "$$p" != b; then \
+			if test ! $(LAB) -eq 4 -o ! "$$p" = c; then \
+				echo "Bad part \"$$p\""; \
+				exit 1; \
+			fi; \
+		fi; \
+		SUF="$(LAB)$$p"; \
+		echo $$SUF > .suf; \
+	else \
+		rm -f .suf; \
+	fi; \
+	git archive --prefix=lab$(LAB)/ --format=tar HEAD | gzip > lab$$SUF-handin.tar.gz
+
+myapi.key:
+	@echo Get an API key for yourself by visiting $(WEBSUB)
+	@read -p "Please enter your API key: " k; \
+	if test `echo -n "$$k" |wc -c` = 32 ; then \
+		TF=`mktemp -t tmp.XXXXXX`; \
+		if test "x$$TF" != "x" ; then \
+			echo -n "$$k" > $$TF; \
+			mv -f $$TF $@; \
+		else \
+			echo mktemp failed; \
+			false; \
+		fi; \
+	else \
+		echo Bad API key: $$k; \
+		echo An API key should be 32 characters long.; \
+		false; \
+	fi;
+
+handin-prep:
+	@./handin-prep
 
 # For test runs
-prep-%:
-	$(V)rm -f $(OBJDIR)/kern/init.o $(IMAGES)
-	$(V)$(MAKE) "DEFS=-DTEST=$$(case $* in *_*) echo $*;; *) echo user_$*;; esac)" $(IMAGES)
-	$(V)rm -f $(OBJDIR)/kern/init.o
 
-run-%-nox-gdb: .gdbinit
-	$(V)$(MAKE) --no-print-directory prep-$*
+prep-%:
+	$(V)$(MAKE) "INIT_CFLAGS=${INIT_CFLAGS} -DTEST=`case $* in *_*) echo $*;; *) echo user_$*;; esac`" $(IMAGES)
+
+run-%-nox-gdb: prep-% pre-qemu
 	$(QEMU) -nographic $(QEMUOPTS) -S
 
-run-%-gdb: .gdbinit
-	$(V)$(MAKE) --no-print-directory prep-$*
+run-%-gdb: prep-% pre-qemu
 	$(QEMU) $(QEMUOPTS) -S
 
-run-%-nox: .gdbinit
-	$(V)$(MAKE) --no-print-directory prep-$*
+run-%-nox: prep-% pre-qemu
 	$(QEMU) -nographic $(QEMUOPTS)
 
-run-%: .gdbinit
-	$(V)$(MAKE) --no-print-directory prep-$*
+run-%: prep-% pre-qemu
 	$(QEMU) $(QEMUOPTS)
 
 # This magic automatically generates makefile dependencies
@@ -228,4 +327,4 @@ always:
 	@:
 
 .PHONY: all always \
-	handin tarball clean realclean distclean grade
+	handin git-handin tarball tarball-pref clean realclean distclean grade handin-prep handin-check

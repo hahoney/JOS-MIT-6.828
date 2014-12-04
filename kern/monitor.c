@@ -60,30 +60,34 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
+        // Your code here.
         uint32_t *ebp, *eip;
         uint32_t arg1, arg2, arg3, arg4, arg5, arg6;
-        uint32_t base_ebp = read_ebp();
-	// Your code here.
         struct Eipdebuginfo info;
         char funname[256];
-        uint32_t dist;
         ebp = (uint32_t*) read_ebp();
+
         cprintf("Stack backtrace:\n");
         while(ebp != 0) {
           eip = (uint32_t*) ebp[1];
+
           cprintf("    ebp %08x  eip %08x  args ", ebp, eip);
           cprintf("%08x %08x %08x %08x %08x\n",
                   ebp[2], ebp[3], ebp[4], ebp[5], ebp[6]);
+
           debuginfo_eip((uintptr_t) eip, &info);
+          // make the function name string
           memmove(funname, info.eip_fn_name, info.eip_fn_namelen);
           *(funname + info.eip_fn_namelen) = 0;
-          dist = (uintptr_t) eip-info.eip_fn_addr;
+
           cprintf("%s:%d: %s+%d\n", info.eip_file, info.eip_line, funname,
-               dist);
+               (uintptr_t) eip-info.eip_fn_addr);
           ebp = (uint32_t*) ebp[0];
         }
 	return 0;
 }
+
+
 
 /***** Kernel monitor command interpreter *****/
 
