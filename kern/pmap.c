@@ -230,6 +230,8 @@ mem_init(void)
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
 
+        boot_map_region(kern_pgdir, KERNBASE, 1 << 28, 0x0, perm_kern);
+
 	// Initialize the SMP-related parts of the memory map
 	mem_init_mp();
 
@@ -280,7 +282,11 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
-
+        int i;
+        for (i = 0; i < NCPU; i++) {
+           uintptr_t kstacktop_i = KSTACKTOP - i * (KSTKSIZE + KSTKGAP);
+           boot_map_region(kern_pgdir, kstacktop_i - KSTKSIZE, KSTKSIZE, PADDR(percpu_kstacks[i]), PTE_P | PTE_W);
+        }
 }
 
 // --------------------------------------------------------------
@@ -323,11 +329,13 @@ page_init(void)
         size_t i;
         size_t addr_IOPHYSMEM = ROUNDDOWN(IOPHYSMEM, PGSIZE)/PGSIZE;
         size_t addr_last = ROUNDUP(PADDR(boot_alloc(0)), PGSIZE)/PGSIZE;
+        size_t addr_MPENTRY = MPENTRY_PADDR/PGSIZE;
         page_free_list = NULL;
 
         for (i = 0; i < npages; i++) {
                 pages[i].pp_ref = 0;
                 if (i == 0) { continue; }
+                if (i == addr_MPENTRY) { continue; }
                 if (i >= addr_IOPHYSMEM && i < addr_last)
                   { continue; }
                 pages[i].pp_link = page_free_list;
@@ -610,7 +618,16 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+        if (base + size > MMIOLIM) {
+            panic("mmio_map_region(): allocation oversize!\n");
+        }
+
+        int size_up = ROUNDUP(size, PGSIZE);
+
+        boot_map_region(kern_pgdir, base, size_up, pa, PTE_PCD|PTE_PWT|PTE_W);
+        base += size_up;
+
+        return (void *) (base - size_up);
 }
 
 static uintptr_t user_mem_check_addr;
@@ -838,10 +855,9 @@ check_kern_pgdir(void)
 
 	// check envs array (new test for lab 3)
 	n = ROUNDUP(NENV*sizeof(struct Env), PGSIZE);
-	for (i = 0; i < n; i += PGSIZE) {
-	        cprintf("%08x,  %08x\n", PADDR(envs) + i, check_va2pa(pgdir, UENVS + i));
+	for (i = 0; i < n; i += PGSIZE) 
         	assert(check_va2pa(pgdir, UENVS + i) == PADDR(envs) + i);
-        }
+
 	// check phys mem
 	for (i = 0; i < npages * PGSIZE; i += PGSIZE)
 		assert(check_va2pa(pgdir, KERNBASE + i) == i);
