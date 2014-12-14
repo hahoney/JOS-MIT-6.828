@@ -158,6 +158,25 @@ fork(void)
 int
 sfork(void)
 {
+        struct Env *childenv;
+        int envid;
+        int addr;
+        int r;
+
+        set_pgfault_handler(pgfault);
+
+        // we are the child
+        envid = sys_exofork();
+        if (envid < 0) { panic("sys_exofork: %e", envid); }
+        if (envid == 0) {
+            thisenv = &envs[ENVX(sys_getenvid())];
+            return 0;
+        }
+
+
+
+
+
 	panic("sfork not implemented");
 	return -E_INVAL;
 }
