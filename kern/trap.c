@@ -93,6 +93,23 @@ trap_init(void)
 
 	extern void ENTRY_SYSCALL();
 
+        extern void ENTRY_IRQ0();
+        extern void ENTRY_IRQ1();
+        extern void ENTRY_IRQ2();
+        extern void ENTRY_IRQ3();
+        extern void ENTRY_IRQ4();
+        extern void ENTRY_IRQ5();
+        extern void ENTRY_IRQ6();
+        extern void ENTRY_IRQ7();
+        extern void ENTRY_IRQ8();
+        extern void ENTRY_IRQ9();
+        extern void ENTRY_IRQ10();
+        extern void ENTRY_IRQ11();
+        extern void ENTRY_IRQ12();
+        extern void ENTRY_IRQ13();
+        extern void ENTRY_IRQ14();
+        extern void ENTRY_IRQ15();
+
 // ZY: Segment selector of GDT and IDT:
 // A reference to a desriptor you can load into a segment register;
 // the selector is an offset of a descriptor table entry. These
@@ -119,6 +136,24 @@ trap_init(void)
     SETGATE(idt[T_SIMDERR], 0, GD_KT, ENTRY_SIMDERR, 0);
 
     SETGATE(idt[T_SYSCALL], 0, GD_KT, ENTRY_SYSCALL, 3);
+ 
+    // IRQ interrupter
+    SETGATE(idt[0+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ0, 0);
+    SETGATE(idt[1+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ1, 0);
+    SETGATE(idt[2+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ2, 0);
+    SETGATE(idt[3+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ3, 0);
+    SETGATE(idt[4+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ4, 0);
+    SETGATE(idt[5+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ5, 0);
+    SETGATE(idt[6+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ6, 0);
+    SETGATE(idt[7+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ7, 0);
+    SETGATE(idt[8+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ8, 0);
+    SETGATE(idt[9+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ9, 0);
+    SETGATE(idt[10+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ10, 0);
+    SETGATE(idt[11+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ11, 0);
+    SETGATE(idt[12+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ12, 0);
+    SETGATE(idt[13+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ13, 0);
+    SETGATE(idt[14+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ14, 0);
+    SETGATE(idt[15+IRQ_OFFSET], 0, GD_KT, ENTRY_IRQ15, 0);
 
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -254,6 +289,12 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle clock interrupts. Don't forget to acknowledge the
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
+
+        if (tf->tf_trapno == IRQ_TIMER+IRQ_OFFSET) {
+            lapic_eoi();
+            sched_yield();
+            return;
+        }
 
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);

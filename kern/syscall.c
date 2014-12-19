@@ -351,14 +351,50 @@ sys_page_unmap(envid_t envid, void *va)
 //	-E_INVAL if srcva < UTOP but srcva is not mapped in the caller's
 //		address space.
 //	-E_INVAL if (perm & PTE_W), but srcva is read-only in the
-//		current environment's address space.
+//		current environment's address space. (and srcva < UTOP)
 //	-E_NO_MEM if there's not enough memory to map srcva in envid's
 //		address space.
 static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_try_send not implemented");
+        int r;
+        struct Env *dstenv;
+        struct PageInfo *page;
+        pte_t *pte_store;
+
+        if ((r = envid2env(envid, &dstenv, 0)) < 0) {
+            return -E_BAD_ENV;
+        }
+        if (!(dstenv->env_ipc_recving)) {
+            return -E_IPC_NOT_RECV;
+        }
+        if (srcva < (void *)UTOP) {
+           if (ROUNDUP(srcva, PGSIZE) != srcva) { return -E_INVAL; }
+           if ( !(perm & PTE_U) || !(perm & PTE_P) || (perm & ~PTE_SYSCALL) ) {
+               return -E_INVAL;
+           }
+           if (!(page = page_lookup(curenv->env_pgdir, srcva, &pte_store))) {
+               return -E_INVAL;
+           }
+           if ((perm & PTE_W) && !((*pte_store) & PTE_W)) { return -E_INVAL; }
+        }
+           
+        dstenv->env_ipc_value = value;
+        dstenv->env_ipc_from = sys_getenvid();
+        dstenv->env_status = ENV_RUNNABLE;
+        dstenv->env_ipc_recving = 0;
+        dstenv->env_tf.tf_regs.reg_eax = 0;
+
+        if ((srcva < (void *)UTOP) && dstenv->env_ipc_dstva && (dstenv->env_ipc_dstva < (void *) UTOP)) {
+            // we can not use sys_page_alloc since the sent page is already allocated
+            if ((r = page_insert(dstenv->env_pgdir, page, dstenv->env_ipc_dstva, perm)) < 0) {
+                return -E_NO_MEM;
+            }
+            dstenv->env_ipc_perm = perm;
+        }
+
+        return 0;
 }
 
 // Block until a value is ready.  Record that you want to receive
@@ -376,7 +412,20 @@ static int
 sys_ipc_recv(void *dstva)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_recv not implemented");
+        // willing to receive page data
+        if (dstva && (dstva < (void *)UTOP) && (ROUNDUP(dstva, PGSIZE) != dstva)) {
+            return -E_INVAL;
+        }
+
+        curenv->env_ipc_recving = 1;
+        curenv->env_ipc_dstva = dstva;
+        curenv->env_ipc_from = 0;
+        curenv->env_status = ENV_NOT_RUNNABLE;
+
+        // big mistake: no need to dead loop here     while (curenv->env_ipc_recving)
+        sched_yield();
+        // mapping and restart env is done by sys_try_send
+
 	return 0;
 }
 
@@ -423,6 +472,12 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
                 break;
             case SYS_page_unmap:
                 ret = sys_page_unmap((envid_t) a1, (void *) a2);
+                break;
+            case SYS_ipc_try_send:
+                ret = sys_ipc_try_send((envid_t) a1, (uint32_t) a2, (void *)a3, (unsigned)a4);
+                break;
+            case SYS_ipc_recv:
+                ret = sys_ipc_recv((void *)a1);
                 break;
             case NSYSCALLS:
                 ret = -E_INVAL;
