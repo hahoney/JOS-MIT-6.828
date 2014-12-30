@@ -1,0 +1,38 @@
++ cc kern/sched.c
++ ld obj/kern/kernel
++ mk obj/kern/kernel.img
+qemu -hda obj/kern/kernel.img -serial mon:stdio -gdb tcp::26500 -D qemu.log -smp 2 
+6828 decimal is 15254 octal!
+Physical memory: 66556K available, base = 640K, extended = 65532K
+check_page_alloc() succeeded!
+check_page() succeeded!
+check_kern_pgdir() succeeded!
+check_page_installed_pgdir() succeeded!
+SMP: CPU 0 found 2 CPU(s)
+enabled interrupts: 1 2
+SMP: CPU 1 starting
+[00000000] new env 00001000
+[00000000] new env 00001001
+[00000000] new env 00001002
+Hello, I am environment 00001000.
+Hello, I am environment 00001001.
+Back in environment 00001000, iteration 0.
+Back in environment 00001001, iteration 0.
+Back in environment 00001000, iteration 1.
+Back in environment 00001001, iteration 1.
+Back in environment 00001000, iteration 2.
+Back in environment 00001001, iteration 2.
+Back in environment 00001000, iteration 3.
+Back in environment 00001001, iteration 3.
+Back in environment 00001000, iteration 4.
+Back in environment 00001001, iteration 4.
+All done in environment 00001000.
+All done in environment 00001001.
+[00001000] exiting gracefully
+[00001000] free env 00001000
+[00001001] exiting gracefully
+[00001001] free env 00001001
+kernel panic on CPU 1 at kern/trap.c:343: Kernel page fault
+Welcome to the JOS kernel monitor!
+Type 'help' for a list of commands.
+K> 
