@@ -189,7 +189,6 @@ file_get_block(struct File *f, uint32_t filebno, char **blk)
     }
     // notice the difference between indirect meta block alloc and 
     // data block alloc !!!!!!!!!!!!!!!!!!!!!!!!!
-    // when should we alloc block?
     if (!(*pdiskbno) && !block_is_free(*pdiskbno)) {
         if ((r = alloc_block()) < 0) { return -E_NO_DISK; }
         *pdiskbno = r;
