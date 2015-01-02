@@ -216,18 +216,21 @@ serve_read(envid_t envid, union Fsipc *ipc)
 	// Lab 5: Your code here:
         if (!req || !ret) { return -E_INVAL; }
         int r;
-        int offset;
+        int req_n;
         struct OpenFile *po;
         
         // lookup opened file desriptor from fileid
         if ((r = openfile_lookup(envid, ipc->read.req_fileid, &po)) < 0) {
             return r;
         }
-
-        if ((r = file_read(po->o_file, ret->ret_buff, req->req_n, offset) < 0) {
+        
+        req_n = req->req_n > PGSIZE ? PGSIZE : req->req_n;
+        if ((r = file_read(po->o_file, ret->ret_buf, req_n, po->o_fd->fd_offset)) < 0) {
+            return r;
         }
+        po->o_fd->fd_offset += r;
 
-	return 0;
+	return r;
 }
 
 
@@ -242,7 +245,22 @@ serve_write(envid_t envid, struct Fsreq_write *req)
 		cprintf("serve_write %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
 
 	// LAB 5: Your code here.
-	panic("serve_write not implemented");
+        int r;
+        struct OpenFile *po;
+        int max_count, count;       
+ 
+        if ((r = openfile_lookup(envid, req->req_fileid, &po)) < 0) {
+            return r;
+        }
+        max_count = PGSIZE - (sizeof(int) + sizeof(size_t));
+        count = req->req_n > max_count ? max_count : req->req_n;
+
+        if ((r = file_write(po->o_file, req->req_buf, count, po->o_fd->fd_offset)) < 0) {
+            return r;
+        }
+        po->o_fd->fd_offset += r;
+        
+        return r;
 }
 
 // Stat ipc->stat.req_fileid.  Return the file's struct Stat to the
