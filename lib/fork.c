@@ -25,8 +25,9 @@ pgfault(struct UTrapframe *utf)
 	//   (see <inc/memlayout.h>).
 
 	// LAB 4: Your code here.
+        if ((err & FEC_WR) == 0) { panic("pgfault access is not write"); }
 
-        if (!(err & FEC_WR) && !(uvpt[(uint32_t) addr >> PTXSHIFT] & PTE_COW)) {
+        if ((uvpd[PDX(addr)] & PTE_P) == 0 || (uvpt[PGNUM(addr)] & PTE_COW) == 0) {
            panic("The pgfault can not be handled due to access limit\n");
         }
 
@@ -46,14 +47,11 @@ pgfault(struct UTrapframe *utf)
         // memmove (dst, src)
         memmove((void *)PFTEMP, (void *)alignaddr, PGSIZE);
 
-        // sys_page_map(src, src, dst, dst)
         // what do we do with the old page? remember that page_insert will
         // remove the old page.
-        if ((r = sys_page_map(0, (void *)PFTEMP, 0, (void *)alignaddr, PTE_W|PTE_U|PTE_P)) < 0) {
+        if ((r = sys_page_map(0, (void *)PFTEMP, 0, (void *)alignaddr, PTE_W|PTE_U|PTE_P)) < 0) 
             panic("Can not map new page to PFTEMP\n");
-        }
    
-	//panic("pgfault not implemented");
 }
 
 //
@@ -70,29 +68,24 @@ pgfault(struct UTrapframe *utf)
 static int
 duppage(envid_t envid, unsigned pn)
 {
-	int r;
+        int r;
         void *addr = (void *) (pn * PGSIZE);
+        int pte = uvpt[pn];
+        int perm = pte & PTE_SYSCALL;
 
-	// LAB 4: Your code here.
-        if ((uvpt[pn] & PTE_W) || (uvpt[pn] & PTE_COW)) {
-            r = sys_page_map(0, addr, envid, addr, PTE_COW|PTE_P|PTE_U);
+        // LAB 4: Your code here.
+        if (!(perm & PTE_SHARE) && ((perm & PTE_W) || (perm & PTE_COW))) {
+            perm &= ~PTE_W;  // set PTE_W to PTE_COW
+            perm |= PTE_COW;
+            r = sys_page_map(0, addr, envid, addr, perm);
             if (r < 0) { return r; }
-            // self mapping 
+            // self mapping
             // because sys_page_map will alloc a new page and invoke page_insert
             // because there is already a page mapped. it will be replaced with the new page
             // however, the old page will not be freed since it still has a ref count from the child copy
-
-            r = sys_page_map(0, addr, 0, addr, PTE_COW|PTE_P|PTE_U);
-            if (r < 0) { return r; }
+            return sys_page_map(0, addr, 0, addr, perm);
         }
-        // otherwise set the page unwritable
-        else {
-            r = sys_page_map(0, addr, envid, addr, PTE_P|PTE_U);
-            if (r < 0) { return r; }
-        }
-
-	//panic("duppage not implemented");
-	return 0;
+        return sys_page_map(0, addr, envid, addr, perm);
 }
 
 //
@@ -160,54 +153,6 @@ fork(void)
 int
 sfork(void)
 {
-        struct Env *childenv;
-        int envid;
-        int addr;
-        int r;
-
-        set_pgfault_handler(pgfault);
-
-        // we are the child
-        envid = sys_exofork();
-        if (envid < 0) { panic("sys_exofork: %e", envid); }
-        if (envid == 0) {
-            thisenv = &envs[ENVX(sys_getenvid())];
-            return 0;
-        }
-
-        // we are the parent
-        // skip the page duplication but the perm should
-        // be modified
-        for (addr = UTEXT; addr < UTOP - PGSIZE; addr+=PGSIZE) {
-            if ((uvpd[PDX(addr)] & PTE_P) && (uvpt[PGNUM(addr)] & PTE_P) && (uvpt[PGNUM(addr)] & PTE_U)) {
-                if (uvpt[PGNUM(addr)] & PTE_W) {
-                    r = sys_page_map(0, (void *)addr, envid, (void *)addr, PTE_W|PTE_P|PTE_U);
-                }
-                else if (uvpt[PGNUM(addr)] & PTE_COW) {
-                    r = sys_page_map(0, (void *)addr, envid, (void *)addr, PTE_COW|PTE_P|PTE_U);
-                    r = sys_page_map(0, (void *)addr, 0, (void *)addr, PTE_COW|PTE_P|PTE_U);
-                }
-                else {
-                    r = sys_page_map(0, (void *)addr, envid, (void *)addr, PTE_P|PTE_U);
-                }
-                if (r < 0) { return r; }
-            }
-        }
-        
-        // // Allocate a new exception stack.
-        r = sys_page_alloc(envid, (void *) (UXSTACKTOP - PGSIZE), PTE_P|PTE_W|PTE_U);
-        if (r < 0) { panic("env page allocation failed\n"); }
-
-        // get the child env
-        extern void _pgfault_upcall(void);
-        sys_env_set_pgfault_upcall(envid, (void *) _pgfault_upcall);
-
-        if ((r = sys_env_set_status(envid, ENV_RUNNABLE)) < 0) {
-                panic("sys_env_set_status: %e", r);
-        }
-
-	//panic("sfork not implemented");
-	//return -E_INVAL;
-        return envid;
+	panic("sfork not implemented");
 }
 

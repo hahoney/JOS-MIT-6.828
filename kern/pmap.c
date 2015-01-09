@@ -362,7 +362,7 @@ page_alloc(int alloc_flags)
         struct PageInfo *retPage = page_free_list;
         if (!page_free_list) { return NULL; }
         if (alloc_flags && ALLOC_ZERO) {
-           memset(page2kva(page_free_list), '\0', PGSIZE);
+           memset(page2kva(retPage), '\0', PGSIZE);
         }
         page_free_list = page_free_list-> pp_link;
         retPage->pp_link = NULL;

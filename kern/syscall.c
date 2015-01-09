@@ -153,12 +153,15 @@ sys_env_set_trapframe(envid_t envid, struct Trapframe *tf)
         if ((check = envid2env(envid, &getenv, 1)) < 0) {
             return -E_BAD_ENV;
         }
-        user_mem_assert(getenv, tf, sizeof(struct Trapframe), PTE_U);
+        user_mem_assert(getenv, tf, sizeof tf, PTE_U);
+        tf->tf_ds = GD_UD | 3;
+        tf->tf_es = GD_UD | 3;
+        tf->tf_ss = GD_UD | 3;
+        tf->tf_cs = GD_UT | 3;
+
+        tf->tf_eflags |= FL_IF;
+
         getenv->env_tf = *tf;
-        // set protection level
-        getenv->env_tf.tf_cs = GD_UT | 3;
-        // turn interruption
-        getenv->env_tf.tf_eflags |= FL_IF;      
        
         return 0;
 }
@@ -219,7 +222,7 @@ sys_page_alloc(envid_t envid, void *va, int perm)
         int check;
 
         // UTOP and va align check
-        if ( ((int) va >= UTOP) || (((int) va) % PGSIZE != 0) ) { 
+        if ( ((int) va >= UTOP) || (ROUNDUP(va, PGSIZE) != va) ) { 
             return -E_INVAL;
         }
         // permission check
@@ -232,8 +235,8 @@ sys_page_alloc(envid_t envid, void *va, int perm)
         check = envid2env(envid, &getenv, 1);
         if (check < 0) { return check; }
 
-        // allocate page
-        newpage = page_alloc(0);
+        // allocate page bug fixed ALLOC_ZERO = 0x10
+        newpage = page_alloc(ALLOC_ZERO);
         if (!newpage) { return -E_NO_MEM; }
 
         check = page_insert(getenv->env_pgdir, newpage, va, perm);    

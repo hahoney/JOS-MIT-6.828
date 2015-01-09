@@ -261,20 +261,19 @@ trap_dispatch(struct Trapframe *tf)
 	// LAB 3: Your code here.
         struct PushRegs *regs;
 
-        switch (tf->tf_trapno) {
-            case T_PGFLT:
-                page_fault_handler(tf);
-                break;
-            case T_BRKPT:
-                monitor(tf);
-                break;
-            case T_SYSCALL:
-                regs = &(tf->tf_regs);
-                regs->reg_eax = syscall(regs->reg_eax, regs->reg_edx, regs->reg_ecx,    \
-                                      regs->reg_ebx, regs->reg_edi, regs->reg_esi);
-                return;
-            default:
-                break;
+        if (tf->tf_trapno == T_PGFLT) {
+            page_fault_handler(tf);
+            return;
+        }
+        if (tf->tf_trapno == T_BRKPT) {
+            monitor(tf);
+            return;
+        }
+        if (tf->tf_trapno == T_SYSCALL) {
+            regs = &(tf->tf_regs);
+            regs->reg_eax = syscall(regs->reg_eax, regs->reg_edx, regs->reg_ecx,    \
+                                  regs->reg_ebx, regs->reg_edi, regs->reg_esi);
+            return;
         }
 
 	// Handle spurious interrupts

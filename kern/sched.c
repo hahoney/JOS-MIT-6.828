@@ -34,7 +34,8 @@ sched_yield(void)
 
         int count = 0;
         for (i = 0; i < NENV; i++) {
-           if ((envs[i].env_status == ENV_RUNNABLE) || (envs[i].env_status == ENV_RUNNING)) { count++; }
+           if ((envs[i].env_type == ENV_TYPE_FS))  
+              count++; 
         }
 
         if (thiscpu->cpu_env == NULL) {

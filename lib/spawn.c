@@ -122,9 +122,9 @@ spawn(const char *prog, const char **argv)
 				     fd, ph->p_filesz, ph->p_offset, perm)) < 0)
 			goto error;
 	}
+
 	close(fd);
 	fd = -1;
-
 	// Copy shared library state.
 	if ((r = copy_shared_pages(child)) < 0)
 		panic("copy_shared_pages: %e", r);
@@ -301,6 +301,29 @@ static int
 copy_shared_pages(envid_t child)
 {
 	// LAB 5: Your code here.
-	return 0;
+        int r;
+        int pdeno, pteno;
+        uint32_t pn = 0;
+
+        for (pdeno = 0; pdeno < PDX(UTOP); pdeno++) {
+            if (uvpd[pdeno] == 0) {
+                pn += NPTENTRIES;
+                continue;
+            }
+
+            for (pteno = 0; pteno < NPTENTRIES; pteno++, pn++) {
+                if (uvpt[pn] == 0)
+                    continue;
+                if (uvpt[pn] & PTE_SHARE) {
+                    void *addr = (void *) (pn << PGSHIFT);
+                    r = sys_page_map(0, addr, child, addr, uvpt[pn]&PTE_SYSCALL);
+                    if (r) {
+                        return r;
+                    }
+                }
+            }
+        }
+        return 0;
+
 }
 
