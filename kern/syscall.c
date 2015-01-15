@@ -13,6 +13,8 @@
 #include <kern/sched.h>
 #include <kern/time.h>
 
+#include <kern/e1000.h>
+
 // Print a string to the system console.
 // The string is exactly 'len' characters long.
 // Destroys the environment on memory errors.
@@ -441,7 +443,7 @@ static int
 sys_ipc_recv(void *dstva)
 {
 	// LAB 4: Your code here.
-        // willing to receive page data
+        // ready to receive page data
         if (dstva && (dstva < (void *)UTOP) && (ROUNDUP(dstva, PGSIZE) != dstva)) {
             return -E_INVAL;
         }
@@ -451,7 +453,7 @@ sys_ipc_recv(void *dstva)
         curenv->env_ipc_from = 0;
         curenv->env_status = ENV_NOT_RUNNABLE;
 
-        // big mistake: no need to dead loop here     while (curenv->env_ipc_recving)
+        // mistake: no need to loop here  
         sched_yield();
         // mapping and restart env is done by sys_try_send
 
@@ -466,6 +468,14 @@ sys_time_msec(void)
         return time_msec();
 }
 
+static int
+sys_net_try_send(char *data, int len) {
+    if ((uintptr_t) data >= UTOP) {
+        return -E_INVAL;
+    }
+    return e1000_transmit(data, len);
+}
+
 // Dispatches to the correct kernel function, passing the arguments.
 int32_t
 syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
@@ -474,60 +484,46 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	// Return any appropriate return value.
 	// LAB 3: Your code here.
 
-	int32_t ret = 0;
-
 	switch (syscallno) {
             case SYS_cputs:
                 sys_cputs((const char *)a1, (size_t) a2);
                 break;
             case SYS_cgetc:
-                ret = sys_cgetc();
-                break;
+                return sys_cgetc();
             case SYS_getenvid:
-                ret = sys_getenvid();
-                break;
+                return sys_getenvid();
             case SYS_env_destroy:
-                ret = sys_env_destroy((envid_t) a1);
-                break;
+                return sys_env_destroy((envid_t) a1);
             case SYS_yield:
                 sys_yield();
                 break;   
             case SYS_exofork:
-                ret = sys_exofork();    
-                break;  
+                return sys_exofork();    
             case SYS_env_set_status:
-                ret = sys_env_set_status((envid_t) a1, (int) a2);
-                break;
+                return sys_env_set_status((envid_t) a1, (int) a2);
             case SYS_env_set_pgfault_upcall:
-                ret = sys_env_set_pgfault_upcall((envid_t) a1, (void *) a2); 
-                break;              
+                return sys_env_set_pgfault_upcall((envid_t) a1, (void *) a2); 
             case SYS_page_alloc:
-                ret = sys_page_alloc((envid_t) a1, (void *) a2, (int) a3);
-                break;
+                return sys_page_alloc((envid_t) a1, (void *) a2, (int) a3);
             case SYS_page_map:
-                ret = sys_page_map((envid_t) a1, (void *) a2, (envid_t) a3, (void *) a4, (int) a5);
-                break;
+                return sys_page_map((envid_t) a1, (void *) a2, (envid_t) a3, (void *) a4, (int) a5);
             case SYS_page_unmap:
-                ret = sys_page_unmap((envid_t) a1, (void *) a2);
-                break;
+                return sys_page_unmap((envid_t) a1, (void *) a2);
             case SYS_ipc_try_send:
-                ret = sys_ipc_try_send((envid_t) a1, (uint32_t) a2, (void *)a3, (unsigned)a4);
-                break;
+                return sys_ipc_try_send((envid_t) a1, (uint32_t) a2, (void *)a3, (unsigned)a4);
             case SYS_ipc_recv:
-                ret = sys_ipc_recv((void *)a1);
-                break;
+                return sys_ipc_recv((void *)a1);
             case SYS_env_set_trapframe:
-                ret = sys_env_set_trapframe((envid_t) a1, (struct Trapframe *) a2);
-                break;
+                return sys_env_set_trapframe((envid_t) a1, (struct Trapframe *) a2);
             case SYS_time_msec:
-                ret = sys_time_msec();
-                break;
+                return sys_time_msec();
+            case SYS_net_try_send:
+                return sys_net_try_send((char *) a1, (int) a2);
             case NSYSCALLS:
 	    default:
-		//return -E_NO_SYS;
                 return -E_INVAL;
 	}
   
-        return ret;
+        return 0;
 }
 
