@@ -60,7 +60,7 @@ ipc_send(envid_t to_env, uint32_t val, void *pg, int perm)
         while ((r = sys_ipc_try_send(to_env, val, srcva, perm)) == -E_IPC_NOT_RECV) {
             sys_yield();
         }
-        if (r < 0) { cprintf("shit r = %d, to_env = %08x\n", r, to_env ); panic("ipc_send(): ipc send error\n"); }
+        if (r < 0) { return; } //panic("ipc_send(): ipc send error\n"); }
 }
 
 // Find the first environment of the given type.  We'll use this to

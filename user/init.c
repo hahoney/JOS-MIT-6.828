@@ -24,7 +24,7 @@ umain(int argc, char **argv)
 {
 	int i, r, x, want;
 	char args[256];
-cprintf("envid %d, va %08x, cont %d\n", sys_getenvid(), args, *((uint32_t *)0x0804000));
+
 	cprintf("init: running\n");
 
 	want = 0xf989e;

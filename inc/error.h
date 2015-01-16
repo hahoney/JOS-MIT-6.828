@@ -28,7 +28,8 @@ enum {
 
         // Network error
         E_PKT_OVERFLOW  ,
-        E_TX_FULL       ,       
+        E_TX_FULL       ,     
+        E_RECV_FAIL     ,  
 	MAXERROR
 };
 

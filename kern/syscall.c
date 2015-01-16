@@ -476,6 +476,18 @@ sys_net_try_send(char *data, int len) {
     return e1000_transmit(data, len);
 }
 
+static int
+sys_net_try_recv(char *data, int *len) {
+    if ((uintptr_t) data >= UTOP) {
+        return -E_INVAL;
+    }
+
+    *len = e1000_receive(data);
+    if (*len > 0) { return 0; }
+
+    return *len;
+}
+
 // Dispatches to the correct kernel function, passing the arguments.
 int32_t
 syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
@@ -519,6 +531,8 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
                 return sys_time_msec();
             case SYS_net_try_send:
                 return sys_net_try_send((char *) a1, (int) a2);
+            case SYS_net_try_recv:
+                return sys_net_try_recv((char *) a1, (int *) a2);
             case NSYSCALLS:
 	    default:
                 return -E_INVAL;
