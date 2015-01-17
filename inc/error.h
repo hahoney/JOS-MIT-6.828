@@ -30,6 +30,9 @@ enum {
         E_PKT_OVERFLOW  ,
         E_TX_FULL       ,     
         E_RECV_FAIL     ,  
+
+        // Http error
+        E_HTTP_NOT_SEND ,
 	MAXERROR
 };
 
